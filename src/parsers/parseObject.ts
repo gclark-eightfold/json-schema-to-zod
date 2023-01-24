@@ -1,10 +1,14 @@
 import { JSONSchema7 } from "json-schema";
+import { isDeepStrictEqual } from 'util';
 import { parseAnyOf } from "./parseAnyOf";
 import { parseOneOf } from "./parseOneOf";
 import { its, parseSchema } from "./parseSchema";
 
 const requiredFlag = ""; //".required()"
 const defaultAdditionalFlag = ""; //".strip()"
+
+const snakeToCamel = (s: string) =>
+  s.replace(/([_][a-z])/ig, ($1) => $1.toUpperCase().replace(/[_]/, ""));
 
 export const parseObject = (
   schema: JSONSchema7 & { type: "object" },
@@ -17,14 +21,19 @@ export const parseObject = (
       ? "z.object({}).strict()"
       : "z.record(z.any())"
     : `z.object({${Object.entries(schema?.properties ?? {}).map(
-        ([k, v]) =>
-          `${JSON.stringify(k)}:${parseSchema(v, withoutDefaults)}${
+        ([k, v]) => {
+          const camelKeyName = snakeToCamel(k);
+          if (camelKeyName !== k && schema.properties?.[camelKeyName] && isDeepStrictEqual(v, schema.properties[camelKeyName])) {
+            return null;
+          }
+          return `${JSON.stringify(camelKeyName)}:${parseSchema(v, withoutDefaults)}${
             schema.required?.includes(k) ||
             (!withoutDefaults && v.hasOwnProperty("default"))
-              ? requiredFlag
-              : ".optional()"
+            ? requiredFlag
+            : ".optional()"
           }`
-      )}})${
+        }
+      ).filter(Boolean)}})${
         schema.additionalProperties === true
           ? ".catchall(z.any())"
           : schema.additionalProperties === false
